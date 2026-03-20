@@ -1,11 +1,111 @@
+from multiprocessing.reduction import ForkingPickler
+from types import SimpleNamespace
+
 import pytest
 from livekit.agents import AgentSession, inference, llm
 
-from agent import Assistant
+import agent_common
+from agent_common import Assistant
 
 
 def _llm() -> llm.LLM:
     return inference.LLM(model="openai/gpt-4.1-mini")
+
+
+def test_build_turn_handling_only_changes_interruption_mode(monkeypatch) -> None:
+    captured: list[dict] = []
+
+    class FakeMultilingualModel:
+        pass
+
+    class FakeTurnHandlingOptions:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+            captured.append(kwargs)
+
+    monkeypatch.setattr(agent_common, "MultilingualModel", FakeMultilingualModel)
+    monkeypatch.setattr(
+        agent_common,
+        "TurnHandlingOptions",
+        FakeTurnHandlingOptions,
+    )
+
+    adaptive = agent_common._build_turn_handling("adaptive")
+    vad = agent_common._build_turn_handling("vad")
+
+    assert isinstance(adaptive, FakeTurnHandlingOptions)
+    assert isinstance(vad, FakeTurnHandlingOptions)
+    assert isinstance(captured[0]["turn_detection"], FakeMultilingualModel)
+    assert isinstance(captured[1]["turn_detection"], FakeMultilingualModel)
+    assert captured[0]["interruption"] == {"mode": "adaptive"}
+    assert captured[1]["interruption"] == {"mode": "vad"}
+
+
+def test_build_session_keeps_voice_stack_identical_between_modes(
+    monkeypatch,
+) -> None:
+    captured_sessions: list[dict] = []
+
+    class FakeComponent:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+    class FakeAgentSession:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+            captured_sessions.append(kwargs)
+
+    monkeypatch.setattr(agent_common.inference, "STT", FakeComponent)
+    monkeypatch.setattr(agent_common.inference, "LLM", FakeComponent)
+    monkeypatch.setattr(agent_common.inference, "TTS", FakeComponent)
+    monkeypatch.setattr(agent_common, "AgentSession", FakeAgentSession)
+    monkeypatch.setattr(
+        agent_common,
+        "_build_turn_handling",
+        lambda interruption_mode: {"interruption": {"mode": interruption_mode}},
+    )
+
+    ctx = SimpleNamespace(proc=SimpleNamespace(userdata={"vad": object()}))
+
+    adaptive = agent_common.build_session(ctx, "adaptive")
+    vad = agent_common.build_session(ctx, "vad")
+
+    assert isinstance(adaptive, FakeAgentSession)
+    assert isinstance(vad, FakeAgentSession)
+
+    adaptive_kwargs = captured_sessions[0]
+    vad_kwargs = captured_sessions[1]
+
+    assert adaptive_kwargs["stt"].kwargs == vad_kwargs["stt"].kwargs == {
+        "model": "deepgram/nova-3",
+        "language": "multi",
+    }
+    assert adaptive_kwargs["llm"].kwargs == vad_kwargs["llm"].kwargs == {
+        "model": "openai/gpt-4.1-mini",
+    }
+    assert adaptive_kwargs["tts"].kwargs == vad_kwargs["tts"].kwargs == {
+        "model": "cartesia/sonic-3",
+        "voice": "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+    }
+    assert adaptive_kwargs["vad"] is vad_kwargs["vad"]
+    assert adaptive_kwargs["preemptive_generation"] is True
+    assert vad_kwargs["preemptive_generation"] is True
+    assert adaptive_kwargs["turn_handling"] == {
+        "interruption": {"mode": "adaptive"},
+    }
+    assert vad_kwargs["turn_handling"] == {
+        "interruption": {"mode": "vad"},
+    }
+
+
+def test_create_server_uses_pickleable_entrypoint() -> None:
+    server = agent_common.create_server(
+        agent_name="interruption-adaptive",
+        interruption_mode="adaptive",
+    )
+
+    assert server._entrypoint_fnc is not None
+    ForkingPickler.dumps(server._entrypoint_fnc)
 
 
 @pytest.mark.asyncio

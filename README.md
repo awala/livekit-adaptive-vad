@@ -2,9 +2,25 @@
   <img src="./.github/assets/livekit-mark.png" alt="LiveKit logo" width="100" height="100">
 </a>
 
-# LiveKit Agents Starter - Python
+# LiveKit Interruption Test - Python
 
-A complete starter project for building voice AI apps with [LiveKit Agents for Python](https://github.com/livekit/agents) and [LiveKit Cloud](https://cloud.livekit.io/).
+A focused comparison project for building two nearly-identical voice AI agents with [LiveKit Agents for Python](https://github.com/livekit/agents) and [LiveKit Cloud](https://cloud.livekit.io/).
+
+## Project thesis
+
+This repo is set up to prove one technical point clearly:
+
+- `adaptive` is not a different voice stack from `vad`
+- both variants still use VAD to detect overlapping user audio
+- adaptive interruption handling adds a smarter classifier on top of that VAD signal to decide whether the overlap is a real barge-in or just noise or backchanneling
+
+The code keeps everything identical across both variants except `interruption.mode`.
+
+## Agent variants
+
+- `src/agent.py` runs `interruption-adaptive` with `interruption.mode="adaptive"`
+- `src/agent_vad.py` runs `interruption-vad` with `interruption.mode="vad"`
+- `src/agent_common.py` holds the shared prompt, shared model stack, and shared session builder so drift stays near zero
 
 The starter project includes:
 
@@ -98,16 +114,20 @@ Before your first run, you must download certain models such as [Silero VAD](htt
 uv run python src/agent.py download-files
 ```
 
-Next, run this command to speak to your agent directly in your terminal:
-
-```console
-uv run python src/agent.py console
-```
-
-To run the agent for use with a frontend or telephony, use the `dev` command:
+Next, run either comparison variant:
 
 ```console
 uv run python src/agent.py dev
+```
+
+```console
+uv run python src/agent_vad.py dev
+```
+
+To speak to the adaptive agent directly in your terminal, use:
+
+```console
+uv run python src/agent.py console
 ```
 
 In production, use the `start` command:
