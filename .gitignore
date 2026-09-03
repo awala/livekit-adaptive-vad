@@ -31,3 +31,7 @@ KMS
 
 # GitHub CLI
 .github/personal-instructions.md
+.tools/
+
+# Separate local reference repo
+pipecat_first/

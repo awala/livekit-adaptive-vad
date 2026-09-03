@@ -139,8 +139,9 @@ def create_server(
     *,
     agent_name: str,
     interruption_mode: InterruptionMode,
+    port: int | None = None,
 ) -> AgentServer:
-    server = AgentServer()
+    server = AgentServer(port=port) if port is not None else AgentServer()
     server.setup_fnc = prewarm
     server.rtc_session(
         SessionEntrypoint(

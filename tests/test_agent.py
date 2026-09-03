@@ -1,3 +1,4 @@
+import importlib
 from multiprocessing.reduction import ForkingPickler
 from types import SimpleNamespace
 
@@ -106,6 +107,14 @@ def test_create_server_uses_pickleable_entrypoint() -> None:
 
     assert server._entrypoint_fnc is not None
     ForkingPickler.dumps(server._entrypoint_fnc)
+
+
+def test_entrypoints_use_distinct_health_ports() -> None:
+    adaptive = importlib.import_module("agent")
+    vad = importlib.import_module("agent_vad")
+
+    assert adaptive.server._port == 8082
+    assert vad.server._port == 8081
 
 
 @pytest.mark.asyncio
